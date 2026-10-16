@@ -1,0 +1,192 @@
+.Dashboard .DocumentCreate {
+  width: 100%;
+  min-height: var(--control-height);
+  padding: 0 14px;
+  align-self: stretch;
+
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0;
+  margin: 0 0 12px;
+
+  border: 1px solid var(--app-line-dim);
+  color: var(--app-accent-neon);
+  box-shadow: none;
+}
+.Dashboard .DocumentCreate > span {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+}
+.DocumentCreate:hover:not(:disabled) {
+  background: rgba(111, 211, 255, 0.16);
+  border-color: var(--app-accent-neon);
+  color: var(--app-text-white);
+  box-shadow: none;
+}
+.DocumentCreate:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.DashboardError, .DashboardStatus {
+  width: 100%;
+  margin: 24px auto;
+  text-align: center;
+  max-width: 42ch;
+  color: var(--app-text-white);
+}
+
+.DocumentList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+}
+
+.DocumentCard {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.DocumentCardReadOnly .DocumentIcon {
+  color: var(--app-muted);
+}
+.DocumentCard:hover {
+  background: rgba(111, 211, 255, 0.06);
+}
+
+.DocumentIconButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.DocumentIcon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  color: var(--app-accent-neon);
+}
+
+.DocumentTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--app-text-white);
+  font-size: var(--dashboard-titledoc-size);
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.DocumentTitleInput {
+  width: 100%;
+  padding: 6px 8px;
+
+  color: white;
+  background: transparent;
+  border: 1px solid var(--app-accent-neon);
+
+  font-size: var(--dashboard-titledoc-size);
+}
+
+.DocumentTitleEdit {
+  flex: 1 1 auto;
+  width: 0;
+}
+
+.DocumentTitleError {
+  display: block;
+  margin-top: 4px;
+  color: #ff6b6b;
+  font-size: 12px;
+}
+
+.DocumentMeta {
+  flex: 0 0 auto;
+  color: var(--app-text-white);
+  opacity: 0.55;
+  font-size: var(--dashboard-text-size);
+  white-space: nowrap;
+}
+.DocumentMetaOwner {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.DocumentMetaDate {
+  max-width: 88px;
+  text-align: right;
+}
+
+.DocumentMenuButton {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 28px;
+  padding: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 0;
+  background: transparent;
+  color: var(--app-text-white);
+  opacity: 0.6;
+  cursor: pointer;
+  transition: opacity 160ms ease;
+}
+.DocumentMenuButton:hover,
+.DocumentMenuButton[data-state="open"] {
+  opacity: 1;
+}
+
+.DocumentCreate:focus-visible,
+.DocumentTitle:focus-visible,
+.DocumentTitleInput:focus-visible,
+.DocumentIconButton:focus-visible,
+.DocumentMenuButton:focus-visible {
+  outline: 2px solid var(--app-accent-yellow);
+  outline-offset: 3px;
+}
+
+@media (max-width: 560px) {
+  .DocumentMetaOwner {
+    display: none;
+  }
+
+  .DocumentCard {
+    gap: 8px;
+    padding: 9px 8px;
+  }
+}
+
+@media (max-width: 400px) {
+  .DocumentMetaDate {
+    display: none;
+  }
+}

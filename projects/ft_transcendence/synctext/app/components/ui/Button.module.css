@@ -1,0 +1,80 @@
+.button {
+  min-height: 36px;
+  padding: 0 14px;
+
+  width: fit-content;
+  align-self: center;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+
+  border: 1px solid transparent;
+
+  cursor: pointer;
+  text-decoration: none;
+
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease;
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.button:focus-visible {
+	outline: 2px solid var(--app-accent-yellow);
+	outline-offset: 2px;
+}
+
+/* GET WRITING / REGISTER / LOGIN SUBMIT - solid yellow, black text */
+
+.primary {
+  color: #090909;
+  background: var(--app-accent-yellow);
+  border-color: var(--app-accent-yellow);
+}
+.primary:hover:not(:disabled) {
+  color: var(--app-accent-yellow);
+  background: transparent;
+  box-shadow: 0 0 10px var(--app-accent-yellow);
+}
+
+/* FEATURES / LOGIN LINK neon outline, ghost fill */
+
+.outline {
+  color: var(--app-accent-neon);
+  background: transparent;
+  border-color: var(--app-accent-neon);
+}
+.outline:hover:not(:disabled) {
+  color: #fff;
+  background: #152744;
+  box-shadow: 0 0 10px var(--app-accent-neon);
+}
+
+/* DELETE / DESTRUCTIVE - red warning, ghost fill (⚠︎ prefix from Button.tsx) */
+.danger {
+  color: rgba(255, 90, 90, 0.85);
+  background: transparent;
+  border-color: rgba(255, 90, 90, 0.85);
+}
+.danger:hover:not(:disabled) {
+  color: #fff;
+  background: rgba(220, 38, 38, 0.85);
+  box-shadow: 0 0 10px rgba(220, 38, 38, 0.85);
+}
+
+.compact {
+  min-height: 30px;
+  padding: 0 10px;
+}
+
+@media (max-width: 900px) {
+  .button {min-height: 32px; padding: 0 10px;}
+}

@@ -1,0 +1,8 @@
+**/.DS_Store
+**/.history/
+**/.vscode/
+**/node_modules/
+**/*.o
+**/a.out
+**/*.dSYM/
+projects/inception/secrets/*.txt

@@ -1,0 +1,20 @@
+NO ./texture/crate/crate_1d.xpm
+
+SO ./texture/crate/crate_1e.xpm
+
+WE ./texture/crate/crate_2c.xpm
+
+EA ./texture/crate/crate_2m.xpm
+
+F 115,110,110
+C 63,55,55
+
+111111111111
+100000000001
+100001110001
+100001000001
+111101011001
+100000000001
+1000E000111
+100000001
+111111111

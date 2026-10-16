@@ -1,0 +1,28 @@
+.link {
+  line-height: 1;
+  text-decoration: none;
+}
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42em;
+  color: var(--app-accent-yellow);
+  font-size: var(--logo-size, inherit);
+  line-height: 1;
+  font-weight: 700;
+}
+
+.separator {
+  color: var(--app-text-white);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.44em;
+  font-weight: 700;
+  letter-spacing: -0.13em;
+}
+
+.mark {
+  width: 1em;
+  height: auto;
+  filter: brightness(0) invert(1);
+}

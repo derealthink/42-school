@@ -1,0 +1,16 @@
+NO ./texture/blue_stone.xpm
+
+SO ./texture/color_stone.xpm
+
+WE ./texture/grey_stone.xpm
+
+EA ./texture/purple_stone.xpm
+
+F 51,0,0
+C 0,0,225
+
+111111
+101101
+101001
+1110N1
+111111

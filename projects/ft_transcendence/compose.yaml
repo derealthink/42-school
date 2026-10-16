@@ -1,0 +1,259 @@
+name: synctext # docker compose project name
+
+services:
+  web: # next.js application
+    build: # build image from the synctext Dockerfile, context at repo root
+      context: .
+      dockerfile: synctext/Dockerfile
+
+    container_name: synctext-web
+
+    restart: unless-stopped
+
+    env_file: # load application configuration from local environment file
+      - .env
+
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      COLLAB_INTERNAL_URL: http://collab:1234
+
+    depends_on: # wait until migrations have been applied before starting next.js
+      migrate:
+        condition: service_completed_successfully
+
+    healthcheck: # check that next.js is ready to serve requests
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok ? 0: 1)).catch(() => process.exit(1))"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    networks:
+      - frontend
+      - backend
+
+  migrate: # applies database migrations, then exits
+    build:
+      context: .
+      dockerfile: packages/db/Dockerfile
+
+    container_name: synctext-migrate
+
+    restart: "no" # one-shot task, not a long-running service
+
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+
+    depends_on: # wait until postgres is ready before applying migrations
+      db:
+        condition: service_healthy
+
+    networks:
+      - backend
+
+  db: # postgresql database
+    image: postgres:16-alpine
+
+    container_name: synctext-db
+
+    restart: unless-stopped
+
+    environment: # postgres reads its initial db configuration from these variables
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+
+    volumes: # keep database data when container is created again
+      - db_data:/var/lib/postgresql/data
+
+    healthcheck: # check that postgres is ready to accept connections
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    networks:
+      - backend
+
+  nginx: # public https entry point for the application
+    build:
+      context: ./services/nginx
+      dockerfile: Dockerfile
+
+    container_name: synctext-nginx
+
+    restart: unless-stopped
+
+    env_file: # provides DOMAIN_NAME to the nginx config template
+      - .env
+
+    environment:
+      NGINX_ENVSUBST_FILTER: "^DOMAIN_NAME$"
+
+    ports:
+      - "8443:443"
+
+    secrets:
+      - server_certificate
+      - server_key
+
+    depends_on:
+      web:
+        condition: service_healthy
+      collab:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- --no-check-certificate https://127.0.0.1/health >/dev/null"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    networks:
+      - frontend
+      - backend
+
+  mailpit: # email testing tool with API
+    image: axllent/mailpit
+
+    container_name: mailpit
+
+    restart: unless-stopped
+
+    ports:
+      - "127.0.0.1:8025:8025"
+
+    volumes:
+      - mailpit_data:/data
+
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_DATABASE: /data/mailpit.db
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+
+    networks:
+      - backend
+
+  collab: # hocuspocus collaboration server for yjs real-time collab
+    build:
+      context: .
+      dockerfile: services/collab/Dockerfile
+
+    container_name: synctext-collab
+
+    environment: # configure internal communication with the web service
+      WEB_INTERNAL_URL: http://web:3000
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+
+    depends_on:
+      web:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:1234/health').then(r=>process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    networks:
+      - frontend
+      - backend
+
+  backup: # automated PostgreSQL backups
+    build:
+      context: .
+      dockerfile: services/backup/Dockerfile
+
+    container_name: synctext-backup
+
+    restart: unless-stopped
+
+    environment:
+      PGHOST: db
+      PGDATABASE: ${DB_NAME}
+      PGUSER: ${DB_USER}
+      PGPASSWORD: ${DB_PASSWORD}
+      BACKUP_INTERVAL_SECONDS: ${DB_BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_RETENTION_COUNT: ${DB_BACKUP_RETENTION_COUNT:-7}
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    volumes:
+      - db_backups:/backups
+
+    networks:
+      - backend
+
+  cleanup: # removes unclaimed guest sessions, guest docs, auth tokens and abandoned signups
+    image: alpine:3.20
+
+    container_name: synctext-cleanup
+
+    restart: unless-stopped
+
+    environment:
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+
+    depends_on:
+      web:
+        condition: service_healthy
+
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        while true; do
+          wget -qO- \
+            --post-data='' \
+            --header="x-internal-service-token: $${INTERNAL_SERVICE_TOKEN}" \
+            http://web:3000/api/internal/guest-sessions/cleanup >/dev/null || true
+          wget -qO- \
+            --post-data='' \
+            --header="x-internal-service-token: $${INTERNAL_SERVICE_TOKEN}" \
+            http://web:3000/api/internal/auth/cleanup >/dev/null || true
+          sleep 300
+        done
+
+    networks:
+      - backend
+
+secrets:
+  server_certificate:
+    file: secrets/${DOMAIN_NAME:-localhost}.crt
+
+  server_key:
+    file: secrets/${DOMAIN_NAME:-localhost}.key
+
+volumes:
+  db_data:
+  db_backups:
+  mailpit_data:
+
+networks:
+  frontend:
+    name: synctext-frontend-network
+
+  backend:
+    name: synctext-backend-network

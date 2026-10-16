@@ -1,0 +1,24 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   main.h                                             :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: aielo <aielo@student.42.fr>                +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/09/15 15:44:44 by aielo             #+#    #+#             */
+/*   Updated: 2025/10/29 17:52:14 by aielo            ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#ifndef MAIN_H
+# define MAIN_H
+
+# include "utils.h"
+# include "types.h"
+# include "libft.h"
+# include "minishell.h"
+
+void	init_minishell(t_minishell *shell, char **envp);
+void	minishell_main_loop(t_minishell	*shell);
+
+#endif

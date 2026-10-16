@@ -1,0 +1,253 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================================================
+// ENUMS
+// ==========================================================================
+enum PlatformRole {
+  USER
+  ADMIN
+}
+
+enum GroupRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+// ==========================================================================
+// MODELS
+// ==========================================================================
+model User {
+  id                String       @id @default(cuid())
+  email             String       @unique
+  username          String       @unique
+  passwordHash      String?      // null = OAuth-only account
+  role              PlatformRole @default(USER) // back-office only, no consumer yet
+  avatarUrl         String?      // null = show default avatar
+  lastSeenAt        DateTime?    // for "online status" // RGPD: Inform the user about storing this data
+  emailVerifiedAt   DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  // Relations
+  accounts                OAuthAccount[]            @relation("UserOAuthAccounts")
+  oauthTransactions       OAuthTransaction[]        @relation("UserOauthTransactions")
+  sessions                Session[]                 @relation("UserSession")
+  emailVerificationTokens EmailVerificationToken[]  @relation("UserEmailVerification")
+  passwordResetTokens     PasswordResetToken[]      @relation("UserPasswordReset")
+  memberships             GroupMember[]             @relation("GroupMembership")
+  createdDocuments        Document[]                @relation("DocumentCreator")
+  friendshipsAsA          Friendship[]              @relation("FriendshipA")
+  friendshipsAsB          Friendship[]              @relation("FriendshipB")
+}
+
+// Every document lives in a group, except an unclaimed guest document. A
+// private space is created at signup: isPrivateSpace set, exactly one member,
+// no invitations.
+model Group {
+  id        String   @id @default(cuid())
+  name      String   // a constant for a private space; never rendered, the client labels from isPrivateSpace
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // A group that belongs to one person alone. Its single OWNER is the person
+  // it belongs to. Nothing guarantees one per user: registration is the only
+  // thing that creates them, in the transaction that creates the account.
+  isPrivateSpace Boolean @default(false)
+
+  members   GroupMember[]
+  documents Document[]
+}
+
+model GroupMember {
+  id        String    @id @default(cuid())
+  groupId   String
+  userId    String
+  role      GroupRole @default(MEMBER)
+  joinedAt  DateTime  @default(now())
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  // Restrict is deliberate: a raw DELETE on User fails while memberships exist,
+  // which forces deletion through deleteUser().
+  user  User  @relation("GroupMembership", fields: [userId], references: [id], onDelete: Restrict)
+
+  grants DocumentGrant[]
+
+  @@unique([groupId, userId])
+  @@index([userId])
+}
+
+model Document {
+  id        String   @id @default(cuid())
+  title     String
+  ystate    Bytes?   // Stores the state of the doc for collaboration
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // A document belongs either to a group or, while it is still unclaimed, to
+  // a temporary guest session. The database migration enforces that exactly
+  // one is present.
+  groupId String?
+  group   Group?  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  guestSessionId String?       @unique
+  guestSession   GuestSession? @relation(fields: [guestSessionId], references: [id], onDelete: Cascade)
+
+  // Display only ("created by X"), carries no right. Null once the account is gone.
+  createdById String?
+  createdBy   User?   @relation("DocumentCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  grants    DocumentGrant[]
+  snapshots DocumentSnapshot[]
+
+  @@index([groupId, updatedAt])
+}
+
+model DocumentSnapshot {
+  id         String   @id @default(cuid())
+  documentId String
+  ystate     Bytes
+  createdAt  DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, createdAt])
+}
+
+// A temporary guest session owns exactly one unclaimed document. Signing in
+// claims that document into the user's private space, which detaches it here.
+model GuestSession {
+  id            String    @id @default(cuid())
+  tokenHash     String    @unique
+  editExpiresAt DateTime
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+
+  document      Document?
+
+  @@index([expiresAt])
+  @@index([editExpiresAt])
+}
+
+// One member's editor access to one document. There is no role column: the row
+// exists or it does not, and an editor may also delete the document and change
+// its grants. Every group member is already a viewer of everything (rule 6).
+// Points at the membership, not the user: leaving the group revokes every
+// exception by cascade, and rejoining creates a new id so nothing resurrects.
+model DocumentGrant {
+  membershipId String
+  documentId   String
+  createdAt    DateTime @default(now())
+
+  membership GroupMember @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  document   Document    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@id([membershipId, documentId])
+  @@index([documentId])
+}
+
+// One row per pair, userAId < userBId enforced by a CHECK (see the migration).
+// Kills cross duplicates, the "A invites B while B invites A" race, and
+// self-friendship at once. DECLINED rows are kept so only the decliner can
+// revive the pair.
+model Friendship {
+  userAId       String
+  userBId       String
+  requestedById String           // always userAId or userBId (CHECK)
+  status        FriendshipStatus @default(PENDING)
+  createdAt     DateTime         @default(now())
+  respondedAt   DateTime?
+
+  userA User @relation("FriendshipA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB User @relation("FriendshipB", fields: [userBId], references: [id], onDelete: Cascade)
+
+  @@id([userAId, userBId])
+  @@index([userAId, status])
+  @@index([userBId, status])
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
+  userId     String
+  user       User     @relation("UserSession", fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+  ip         String?   // RGPD: Inform the user about storing this data
+  userAgent  String?   // RGPD: Inform the user about storing this data
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+model EmailVerificationToken {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("UserEmailVerification", fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String   @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("UserPasswordReset", fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String   @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+}
+
+model OAuthAccount {
+  id                  String     @id @default(cuid())
+  userId              String
+  provider            String     // "google"
+  providerAccountId   String     // OIDC `sub` (subject claim). The link key. Never an email
+  emailAtLinkTime     String?
+  createdAt           DateTime   @default(now())
+
+  user                User       @relation("UserOAuthAccounts", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+enum OAuthPurpose {
+  SIGN_IN
+  LINK
+}
+
+model OAuthTransaction {
+  stateHash           String         @id
+  codeVerifier        String
+  nonce               String
+  purpose             OAuthPurpose   @default(SIGN_IN)
+  userId              String?
+  user                User?          @relation("UserOauthTransactions", fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt           DateTime
+  usedAt              DateTime?      // null = still live
+  createdAt           DateTime       @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}

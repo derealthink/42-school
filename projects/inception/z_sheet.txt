@@ -1,0 +1,167 @@
+--------------------------------
+Inception Project — Cheat Sheet
+--------------------------------
+1) Stack Overview
+- Services:
+  - mariadb: MariaDB 10.x server initialized via custom entrypoint.
+  - wordpress: PHP-FPM 8.2 container running WordPress, managed with WP-CLI.
+  - nginx: TLS-terminating reverse proxy serving WordPress over HTTPS.
+- Orchestration: docker compose (file at srcs/docker-compose.yml), using a custom bridge network.
+- Persistence: bind-mounted volumes into /home/ubo/data/{mariadb,wordpress}.
+- Configuration:
+  - Environment variables from srcs/.env.
+  - Secrets from text files under Inception/secrets/*.txt (referenced via docker compose secrets).
+2) Key Paths & Files
+- Makefile: /home/ubo/42/Inception/Makefile
+- Compose file: /home/ubo/42/Inception/srcs/docker-compose.yml
+- Env file: /home/ubo/42/Inception/srcs/.env
+- Secrets directory: /home/ubo/42/Inception/secrets/
+  - db_root_password.txt
+  - db_password.txt
+  - wp_admin_password.txt
+  - wp_user_password.txt
+- Dockerfiles:
+  - Nginx: srcs/requirements/nginx/Dockerfile
+  - WordPress: srcs/requirements/wordpress/Dockerfile
+  - MariaDB: srcs/requirements/mariadb/Dockerfile
+- Entrypoints:
+  - Nginx: srcs/requirements/nginx/tools/entrypoint.sh
+  - WordPress: srcs/requirements/wordpress/tools/entrypoint.sh
+  - MariaDB: srcs/requirements/mariadb/tools/entrypoint.sh
+- Nginx config template: srcs/requirements/nginx/conf/default.conf.template
+- WP-FPM pool config: srcs/requirements/wordpress/conf/www.conf
+- MariaDB config: srcs/requirements/mariadb/conf/50-server.cnf
+3) How It Runs (compose)
+- Network: services share the bridge network named inception.
+- Volumes:
+  - mariadb -> /home/ubo/data/mariadb:/var/lib/mysql
+  - wordpress -> /home/ubo/data/wordpress:/var/www/html
+- Ports:
+  - nginx exposes 443 on the host: "443:443"
+- Secrets:
+  - db_root_password -> ../secrets/db_root_password.txt
+  - db_password -> ../secrets/db_password.txt
+  - wp_admin_password -> ../secrets/wp_admin_password.txt
+  - wp_user_password -> ../secrets/wp_user_password.txt
+4) Make Targets
+- make up: Creates data dirs, builds, and starts all services in detached mode.
+- make build: Builds images.
+- make down: Stops and removes containers.
+- make stop: Stops containers without removing.
+- make clean: Down with --remove-orphans.
+- make fclean: Down with volumes; also wipes /home/ubo/data/{mariadb,wordpress}.
+- make re: Rebuild/reset everything (fclean + up).
+- make ps: Shows compose service statuses.
+- make logs: Follows logs for all services.
+5) Environment Variables (srcs/.env)
+- DOMAIN_NAME: Hostname used by both Nginx (server_name, self-signed cert CN) and WordPress site URL. Example: uponci.42.fr
+- MYSQL_DATABASE: Database name for WordPress. Example: wordpress
+- MYSQL_USER: DB user that WordPress uses. Example: wp_user
+- WORDPRESS_TITLE: Site title used on initial install. Example: Inception
+- WORDPRESS_ADMIN_USER: Initial WP admin username. Example: ubo_owner
+- WORDPRESS_ADMIN_EMAIL: Initial WP admin email. Example: ubo@example.com
+- WORDPRESS_USER: Additional author user created on first install. Example: ubo_writer
+- WORDPRESS_USER_EMAIL: Email for the additional author. Example: writer@example.com
+Secrets are not stored in .env; they are supplied via files and read by the containers at runtime:
+- MariaDB uses:
+  - MYSQL_ROOT_PASSWORD_FILE=/run/secrets/db_root_password
+  - MYSQL_PASSWORD_FILE=/run/secrets/db_password
+- WordPress uses:
+  - MYSQL_PASSWORD_FILE=/run/secrets/db_password
+  - WORDPRESS_ADMIN_PASSWORD_FILE=/run/secrets/wp_admin_password
+  - WORDPRESS_USER_PASSWORD_FILE=/run/secrets/wp_user_password
+6) Secrets (required)
+Create the following files before running compose (contents are the plaintext passwords):
+- Inception/secrets/db_root_password.txt
+- Inception/secrets/db_password.txt
+- Inception/secrets/wp_admin_password.txt
+- Inception/secrets/wp_user_password.txt
+Compose mounts them into /run/secrets inside the containers.
+7) Entrypoint Logic
+- MariaDB (requirements/mariadb/tools/entrypoint.sh)
+  - Validates required env and secret files.
+  - Initializes datadir if missing (mariadb-install-db).
+  - Starts a temporary local mysqld over a UNIX socket (no TCP) to run bootstrap SQL:
+    - Creates DB ${MYSQL_DATABASE}.
+    - Creates user ${MYSQL_USER} with ${MYSQL_PASSWORD} and grants privileges.
+    - Sets root password to ${MYSQL_ROOT_PASSWORD}.
+    - Cleans test DB/anonymous users.
+  - Shuts down temp mysqld, marks initialization with /var/lib/mysql/.inception_initialized.
+  - Execs main process: mariadbd --user=mysql --console.
+  - Config: binds 0.0.0.0:3306 so WordPress can connect over the compose network.
+- WordPress (requirements/wordpress/tools/entrypoint.sh)
+  - Validates required env vars and secret files.
+  - Waits for MariaDB readiness using mariadb-admin ping to ${WORDPRESS_DB_HOST} (set to mariadb:3306 in compose).
+  - Downloads WordPress core if missing in /var/www/html.
+  - Creates wp-config.php with DB settings.
+  - Installs WordPress if not installed:
+    - Sets URL to https://${DOMAIN_NAME}
+    - Sets title, admin user+password+email.
+    - Creates additional author user.
+  - Fixes ownership (www-data) and execs php-fpm8.2 -F.
+- Nginx (requirements/nginx/tools/entrypoint.sh)
+  - Requires DOMAIN_NAME.
+  - Generates a self-signed cert/key in /etc/nginx/ssl if not present:
+    - CN = ${DOMAIN_NAME}
+  - Renders /etc/nginx/sites-enabled/default from template using envsubst.
+  - Execs Nginx (daemon off).
+8) Nginx Config Template (default.conf.template)
+- Listens on 443 with the self-signed cert.
+- server_name ${DOMAIN_NAME}
+- Serves /var/www/html (mounted read-only from wordpress volume).
+- Sends PHP requests to fastcgi_pass wordpress:9000.
+- try_files for front-controller pattern.
+9) Data Persistence
+- Host directories:
+  - /home/ubo/data/mariadb -> MariaDB data dir.
+  - /home/ubo/data/wordpress -> WordPress code/uploads/content.
+- Removing these directories (fclean) resets DB and WordPress content.
+10) Networking
+- Custom bridge network named inception.
+- Service DNS names:
+  - mariadb reachable as host "mariadb" on port 3306.
+  - wordpress reachable internally as "wordpress" (PHP-FPM at 9000).
+  - nginx exposes 443 to host.
+11) Accessing the Site (DNS/Hosts)
+- The browser uses DOMAIN_NAME (from srcs/.env). For local testing you must make the hostname resolve to the machine where Nginx is bound.
+- If running directly on your host (not VM), add to your host’s /etc/hosts:
+  - 127.0.0.1 uponci.42.fr
+  - Then browse https://uponci.42.fr
+- If running inside a VM, add to your host’s /etc/hosts with the VM’s IP:
+  - <VM_IP> uponci.42.fr
+- If your DOMAIN_NAME is an internal 42 DNS name, you may need to be on the school network/VPN or replace DOMAIN_NAME with a local name (e.g., ubo.local) and add it to /etc/hosts.
+- The certificate is self-signed, so the browser will show a security warning. Proceed to view the site.
+12) Common Commands
+- Start: make up
+- Status: make ps
+- Logs: make logs
+- Rebuild: make build
+- Stop: make down or make stop
+- Reset everything: make fclean then make up
+13) Troubleshooting
+- ERR_NAME_NOT_RESOLVED in browser:
+  - Ensure /etc/hosts maps DOMAIN_NAME to 127.0.0.1 (host) or VM IP.
+  - Confirm you’re on the correct network/VPN if using an internal domain.
+- Nginx not reachable:
+  - Check port 443 conflicts (another service may be listening).
+  - make ps to ensure nginx is up; make logs to inspect.
+- TLS warnings:
+  - Expected: self-signed cert. Use https and accept the warning for local dev.
+- WordPress install loop or 502:
+  - Confirm WordPress container is running and listening on 9000.
+  - Check WordPress logs for DB connectivity errors.
+- DB connection errors:
+  - Verify secrets exist and match user in .env.
+  - Confirm mariadb is healthy; logs should show successful init.
+- Reinitialization:
+  - If you need a clean slate, run make fclean to remove data volumes and rerun make up.
+14) Notes
+- DOMAIN_NAME is used by:
+  - Nginx: server_name and self-signed certificate CN.
+  - WordPress: site URL on first install (wp core install --url).
+- Changing DOMAIN_NAME after initial install:
+  - You’ll need to update WordPress site/home URLs (via wp-cli or wp-admin).
+- Paths are tied to user “ubo” in compose volumes. If you change user/paths, update docker-compose.yml accordingly.
+- Secrets are plain text files on disk; don’t commit them.
+End of cheat sheet.
+Next step: If you want, I can write this to cheat_sheet.txt at the repo root once edits are permitted.

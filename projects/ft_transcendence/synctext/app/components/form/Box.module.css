@@ -1,0 +1,52 @@
+.frame {
+  width: 100%;
+  box-sizing: border-box;
+
+  border: 1px solid transparent;
+  border-bottom-color: var(--app-line-dim);
+
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.frame:hover,
+.frame:focus-within {
+  border-color: var(--app-line-dim);
+  box-shadow: 0 0 1px var(--app-accent-neon), 0 0 10px rgba(0, 243, 255, 0.55);
+}
+
+.surface {
+  width: 100%;
+  min-height: calc(var(--control-height) - 2px);
+  box-sizing: border-box;
+
+  display: flex;
+  align-items: center;
+
+  background: transparent;
+
+  font-family: monospace;
+  font-size: var(--dashboard-text-size, 14px);
+}
+
+.surface > * {
+  width: 100%;
+  min-height: calc(var(--control-height) - 2px);
+  box-sizing: border-box;
+  padding: 10px 12px;
+
+  color: inherit;
+  background: transparent;
+
+  border: 0;
+  outline: none;
+
+  font: inherit;
+}
+
+@media (max-width: 900px) {
+  .surface > * {
+    padding: 6px 10px;
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "name": "synctext",
+  "private": true,
+  "workspaces": [
+    "synctext",
+    "packages/db",
+    "packages/shared",
+    "services/collab"
+  ],
+  "scripts": {
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "npm --workspaces run typecheck"
+  },
+  "allowScripts": {
+    "@prisma/engines@7.9.1": true,
+    "argon2@0.45.1": true,
+    "prisma@7.9.1": true,
+    "unrs-resolver@1.12.2": true,
+    "@parcel/watcher@2.6.0": true
+  },
+  "devDependencies": {
+    "@prisma/config": "^7.9.1",
+    "eslint": "^9",
+    "@eslint/js": "^9",
+    "typescript": "^5",
+    "typescript-eslint": "^8"
+  },
+  "engines": {
+    "node": "^22.12.0 || >=24.0"
+  },
+  "overrides": {
+    "mysql2": "^3.24.5"
+  }
+}
